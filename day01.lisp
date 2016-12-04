@@ -1,5 +1,5 @@
 ;; Advent of Code 2016, Day 01
-(require 'cl-ppcre)
+(require "cl-ppcre")
 (defvar input)
 
 (defun parse-input (inp)
