@@ -1,5 +1,6 @@
 ;; Advent of Code 2016, Day 04
-(require "cl-ppcre")
+(eval-when (:compile-toplevel :execute :load-toplevel)
+  (require :cl-ppcre))
 
 ;; Problem description:
 ;
