@@ -1,4 +1,4 @@
-;; Advent of Code 2016, Day 06
+;; Advent of Code 2016, Day 07
 (eval-when (:compile-toplevel :execute :load-toplevel)
   (require :cl-ppcre))
 
