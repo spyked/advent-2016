@@ -17,7 +17,7 @@
 ; - dec x decreases the value of register x by 1
 ;
 ; - jnz x y jumps relative to the current "instruction pointer" by an
-;   immediate offset of y if the value held in register x is not zero
+;   immediate offset of y if x (register value or immediate) is not zero
 ;
 ; The machine halts when the "instruction pointer" goes out of bounds.
 ;
