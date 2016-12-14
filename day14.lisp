@@ -112,6 +112,7 @@ iterated by iterator."
       ;(print (cons (car three-chars) (car five-chars)))
       (if (search rpt5 (cadar five-chars))
           (progn
+            (format t "Found key: ~s~%" (car three-chars))
             (values (car three-chars) (cdr three-chars)))
           (find-key (cdr three-chars))))))
 
@@ -123,17 +124,56 @@ iterated by iterator."
           (find-key md5-stream)
         (cons key (find-keys rest (- n 1))))))
 
+;; Part 2
+;
+; The algorithm is the same, but the input stream is generated
+; differently. Each input + index is hashed not once, but a total 2017
+; times.
+;
+; For example:
+;
+; - md5(abc0) = 577571be4de9dcce85a041ba0410f29f
+; - md5(577571be4de9dcce85a041ba0410f29f) = eec80a0c92dc8a0777c619d9bb51e910
+; - md5(eec80a0c92dc8a0777c619d9bb51e910) = 16062ce768787384c81fe17a7a60c7e3
+; ...
+; - md5(...) = a107ff634856bb300138cac6568c0f24
+;
+; That is how a hash in the stream is generated; the 3-5 checks remain
+; the same.
+;;
+(defun get-md5-hash-times (str n)
+  "Hash str sequentially n times."
+  (do* ((k 0 (1+ k))
+        (s str)
+        (h (get-md5-hash s) (get-md5-hash s)))
+       ((= k n) s)
+    (setq s h)))
+
+(defun make-md5-stream2 (id &optional (iterator 0))
+  "Starting from secret string id and the iterator, build a stream of
+strings hashed 2017 times."
+  (cons (list iterator (get-md5-hash-times (make-input id iterator) 2017))
+        #'(lambda () (make-md5-stream2 id (1+ iterator)))))
+
 ;; Tests
 (let ((test1.0-input "abc"))
   (format t "## Test 1.0: ~a~%" test1.0-input)
   (let* ((stream (make-md5-stream test1.0-input))
          (keys (find-keys stream 64)))
+    (format t "64th key is: ~s~%" (elt keys 63)))
+  (format t "## Test 2.0: ~a~%" test1.0-input)
+  (let* ((stream (make-md5-stream2 test1.0-input))
+         (keys (find-keys stream 64)))
     (format t "64th key is: ~s~%" (elt keys 63))))
 
-(let ((test1.1-input "qzyelonm"))
-  (format t "## Test 1.1: ~a~%" test1.1-input)
-  (let* ((stream (make-md5-stream test1.1-input))
+(let ((test-input "qzyelonm"))
+  (format t "## Test 1.1: ~a~%" test-input)
+  (let* ((stream (make-md5-stream test-input))
          (keys (find-keys stream 64)))
     (format t "~s~%" keys)
+    (format t "64th key is: ~s~%" (elt keys 63)))
+  (format t "## Test 2.1: ~a~%" test-input)
+  (let* ((stream (make-md5-stream2 test-input))
+         (keys (find-keys stream 64)))
     (format t "64th key is: ~s~%" (elt keys 63))))
 
