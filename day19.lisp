@@ -97,20 +97,29 @@ actual elf from the list."
          (e elves (cdr e)))
         ((= k num-pos) e))))
 
-(defun iterate2 (elves)
+(defun iterate2 (elves n)
   "Solve part 2."
-  (do ((e elves (cdr e))
-       (fin nil)
-       (counter 0 (1+ counter)))
-      ((or fin (circlen-is-1? e)) e)
-    (let* ((bef-victim (find-elf-across e))
-           (victim (cdr bef-victim)))
-      (when (= 0 (mod counter 1000))
-       (format t "Elf ~s takes from ~s.~%" (car e) (car victim)))
-      (incf (cdar e) (cdar victim))      
-      (setf (cdr bef-victim) (cdr victim))
-      ;(setq fin t)
-      )))
+  (let ((e elves)
+        (bef-victim (find-elf-across elves)))
+    (do ((fin nil)
+         (counter n (- counter 1)))
+        ((or fin (circlen-is-1? e)) e)
+      (let* ((victim (cdr bef-victim)))
+        ;; (when (= 0 (mod counter 1000))
+        ;;  (format t "Elf ~s takes from ~s.~%" (car e) (car victim)))
+
+        ; Update presents, remove victim
+        (incf (cdar e) (cdar victim))
+        (setf (cdr bef-victim) (cdr victim))
+
+        ; Update elves: we only update the victim once two iterations
+        ; (empirically that seems to be the case, it can probably be
+        ; demonstrated inductively).
+        (setq e (cdr e))
+        (when (= 1 (mod counter 2))
+         (setq bef-victim (cdr bef-victim)))
+        ;(setq fin t)
+        ))))
 
 ;; Tests
 (let* ((test-input 5)
@@ -121,7 +130,7 @@ actual elf from the list."
 (let* ((test-input 5)
        (elves (make-elves test-input)))
   (format t "## Test 0.2: ~d elves.~%" test-input)
-  (format t "Winning elf is ~s.~%" (iterate2 elves)))
+  (format t "Winning elf is ~s.~%" (iterate2 elves test-input)))
 
 (let* ((my-input 3018458)
        (elves (make-elves my-input)))
@@ -131,4 +140,4 @@ actual elf from the list."
 (let* ((my-input 3018458)
        (elves (make-elves my-input)))
   (format t "## Test 2: ~d elves.~%" my-input)
-  (format t "Winning elf is ~s.~%" (iterate2 elves)))
+  (format t "Winning elf is ~s.~%" (iterate2 elves my-input)))
