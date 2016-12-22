@@ -38,6 +38,10 @@ data (avail and use%)."
         (cl-ppcre:scan-to-strings spec line)
       (declare (ignore _))
       (when arr
+        ; Make sure our input is correct.
+        (assert (= (parse-integer (elt arr 2))
+                   (+ (parse-integer (elt arr 3))
+                      (parse-integer (elt arr 4)))))
         (list (parse-integer (elt arr 0))
               (parse-integer (elt arr 1))
               (parse-integer (elt arr 2))
@@ -52,26 +56,59 @@ data (avail and use%)."
       ((null line) result)
     (push (parse-df-line line) result)))
 
-;; Stolen from day 11.
-;; XXX might need to use streams if outputs are large enough.
-;;
-;; XXX This is not useful! We need to group *adjacent* pairs in our
-;; network topology.
-(defun combs-of-at-most (S k &optional (acc nil))
-  "Combinations of elements in S in groups of at most k."
-  (if (or (null S) (= 0 k))
-      (list acc)
-      (append (combs-of-at-most (remove (car S) S) (- k 1) (cons (car S) acc))
-              (combs-of-at-most (cdr S) k acc))))
+(defun find-node (node nodes)
+  (find node nodes :test
+        #'(lambda (x1 x2)
+            (and (= (car x1) (car x2))
+                 (= (cadr x1) (cadr x2))))))
 
-(defun combs-of (S k)
-  "Combinations of elements in S in groups of exactly k."
-  (remove-if-not #'(lambda (L) (= (length L) k))
-                 (combs-of-at-most S k)))
+;; XXX: useless.
+(defun get-adjacent-nodes (node nodes)
+  "Get adjacent nodes for a given node."
+  (remove-if #'null
+             (mapcar #'(lambda (node offset)
+                         (find-node (list (+ (car node) (car offset))
+                                          (+ (cadr node) (cdr offset))
+                                          0 0) nodes))
+                     (list node node node node)
+                     (list '(0 . 1) '(1 . 0) '(0 . -1) '(-1 . 0)))))
+
+;; XXX: useless.
+(defun adjacent-node-pairs (nodes)
+  "Get all pairs of adjacent nodes."
+  (apply #'concatenate 'list
+         (mapcar #'(lambda (node)
+                     (mapcar #'(lambda (neighbour)
+                                 (cons node neighbour))
+                             (get-adjacent-nodes node nodes)))
+                 nodes)))
+
+(defun node-pairs (nodes)
+  "Get all pairs of nodes."
+  (apply #'concatenate 'list
+         (mapcar #'(lambda (node)
+                     (mapcar #'(lambda (other-node)
+                                 (cons node other-node))
+                             nodes))
+                 nodes)))
+
+(defun is-viable? (node-pair)
+  "Is a pair (node1 . node2) viable?"
+  (let ((node1 (car node-pair))
+        (node2 (cdr node-pair)))
+    (and (> (cadddr node1) 0)
+         (not (and (= (car node1) (car node2))
+                   (= (cadr node1) (cadr node2))))
+         (<= (cadddr node1) (- (caddr node2) (cadddr node2))))))
+
+(defun viable-pairs (nodes)
+  "Return all the viable pairs in a list of nodes."
+  (remove-if-not #'is-viable? (node-pairs nodes)))
 
 ;; Tests
 (let ((nodes (with-open-file (in "day22-input")
                (parse-input in))))
-  ;(print nodes)
-  ;(print (combs-of nodes 2))
-  )
+  (format t "## Test 1: from day22-input~%")
+  (let ((viable (viable-pairs nodes)))
+   (format t "Viable pairs are: ~s~%(total ~d)~%"
+           viable (length viable))))
