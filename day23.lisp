@@ -145,6 +145,44 @@ dec a
               (or (symbolp (caddr instr)) (numberp (caddr instr)))))
     (tgl (or (symbolp (cadr instr)) (numberp (cadr instr))))))
 
+(defun try-add (mach instr-mem)
+  (let* ((ip (mach-reg-ip mach))
+         (len (length instr-mem))
+         (i1 (elt instr-mem (- ip 1)))
+         (i2 (when (< ip len) (elt instr-mem ip)))
+         (i3 (when (< (1+ ip) len) (elt instr-mem (1+ ip))))
+         (reg1 nil)
+         (reg2 nil))
+    (when (and i1 i2 i3)
+      (cond
+        ; inc reg1; dec reg2; jnz reg2 -2
+        ((and (eq (car i1) 'inc)
+              (eq (car i2) 'dec)
+              (eq (car i3) 'jnz)
+              (eq (cadr i2) (cadr i3))
+              (eq (caddr i3) -2))
+         (setq reg1 (cadr i1))
+         (setq reg2 (cadr i2)))
+        ; dec reg2; inc reg1; jnz reg2 -2
+        ((and (eq (car i1) 'dec)
+              (eq (car i2) 'inc)
+              (eq (car i3) 'jnz)
+              (eq (cadr i1) (cadr i3))
+              (eq (caddr i3) -2))
+         (setq reg1 (cadr i2))
+         (setq reg2 (cadr i1))))
+      (when (and reg1 reg2)
+        ;(format t "opt-add ~s ~s~%" reg1 reg2)
+        (setf-reg reg1 mach (+ (getf-reg reg1 mach) (getf-reg reg2 mach)))
+        (setf-reg reg2 mach 0)
+        (incf (mach-reg-ip mach) 2)
+        t))))
+
+(defun try-opt (mach instr-mem)
+  (cond
+    ; Add
+    ((try-add mach instr-mem))))
+
 (defun mach-step (mach instr-mem)
   ; First, fetch
   (let ((instr (elt instr-mem (mach-reg-ip mach))))
@@ -152,34 +190,36 @@ dec a
     (incf (mach-reg-ip mach))
     ; Decode/execute
     (when (valid-instr? instr)
-     (case (car instr)
-       (cpy (setf-reg (caddr instr) mach
-                      (if (integerp (cadr instr))
-                          (cadr instr)
-                          (getf-reg (cadr instr) mach))))
-       (inc (let ((val (getf-reg (cadr instr) mach)))
-              (setf-reg (cadr instr) mach (+ val 1))))
-       (dec (let ((val (getf-reg (cadr instr) mach)))
-              (setf-reg (cadr instr) mach (- val 1))))
-       (jnz (let ((val (if (integerp (cadr instr))
-                           (cadr instr)
-                           (getf-reg (cadr instr) mach)))
-                  (off (- (if (integerp (caddr instr))
-                              (caddr instr)
-                              (getf-reg (caddr instr) mach))
-                          1)))
-              (when (not (= 0 val))
-                (incf (mach-reg-ip mach) off))))
-       (tgl (let* ((val (getf-reg (cadr instr) mach))
-                   (ip (+ (mach-reg-ip mach) val -1)))
-              (when (and (>= ip 0) (< ip (length instr-mem)))
-                (let ((old-instr (elt instr-mem ip)))
-                  (setf (elt instr-mem ip)
-                        (case (car old-instr)
-                          (inc (alter-mnem dec old-instr))
-                          ((dec tgl) (alter-mnem inc old-instr))
-                          (jnz (alter-mnem cpy old-instr))
-                          (cpy (alter-mnem jnz old-instr)))))))))))
+     (let ((opt (try-opt mach instr-mem)))
+      (when (not opt)
+          (case (car instr)
+            (cpy (setf-reg (caddr instr) mach
+                           (if (integerp (cadr instr))
+                               (cadr instr)
+                               (getf-reg (cadr instr) mach))))
+            (inc (let ((val (getf-reg (cadr instr) mach)))
+                   (setf-reg (cadr instr) mach (+ val 1))))
+            (dec (let ((val (getf-reg (cadr instr) mach)))
+                   (setf-reg (cadr instr) mach (- val 1))))
+            (jnz (let ((val (if (integerp (cadr instr))
+                                (cadr instr)
+                                (getf-reg (cadr instr) mach)))
+                       (off (- (if (integerp (caddr instr))
+                                   (caddr instr)
+                                   (getf-reg (caddr instr) mach))
+                               1)))
+                   (when (not (= 0 val))
+                     (incf (mach-reg-ip mach) off))))
+            (tgl (let* ((val (getf-reg (cadr instr) mach))
+                        (ip (+ (mach-reg-ip mach) val -1)))
+                   (when (and (>= ip 0) (< ip (length instr-mem)))
+                     (let ((old-instr (elt instr-mem ip)))
+                       (setf (elt instr-mem ip)
+                             (case (car old-instr)
+                               (inc (alter-mnem dec old-instr))
+                               ((dec tgl) (alter-mnem inc old-instr))
+                               (jnz (alter-mnem cpy old-instr))
+                               (cpy (alter-mnem jnz old-instr)))))))))))))
   mach)
 
 (defun mach-run (mach instr-mem)
@@ -200,6 +240,49 @@ dec a
   (let ((mach (make-mach)))
     (setf-reg 'a mach 12)
     mach))
+
+;; Idea to optimize the assembunny machine, for Part 2:
+;
+; The machine is pretty inefficient when given the input for Part 2, but
+; given that we run it on a real computer, we can optimize some of the
+; operations.
+;
+; For example, the sequence:
+;
+; inc a
+; dec c
+; jnz c -2
+;
+; is a loop that adds to a, decreases c and repeats while c is not
+; zero. This is equivalent to adding c to a, storing the result in a,
+; then setting c to zero. So in an extended assembunny language, this
+; would be equivalent to:
+;
+; add c a
+; cpy 0 c
+;
+; So we define the implicit instructions add, sub and nop and we define
+; the following transformations:
+;
+; inc {reg1}         nop
+; dec {reg2}     ->  add {reg2} {reg1}
+; jnz {reg2} -2      sub {reg2} {reg2}
+;
+; and
+;
+; dec {reg2}         nop
+; inc {reg1}     ->  add {reg2} {reg1}
+; jnz {reg2} -2      sub {reg2} {reg2}
+;
+; There may be others, such as for multiply instructions (this is given
+; as a hint in the problem), but we ignore them for now.
+;
+; One caveat of this approach is that, given the existence of tgl, we
+; cannot perform this optimization statically (because the code is not
+; unmodifiable, as assumed on most mainstream systems we know). So we
+; need to inspect these patterns *at run-time*, which is both
+; interesting and burdensome for the implementation of our CPU.
+;;
 
 ;; Tests
 (let ((instr-mem (with-input-from-string (in test-input)
