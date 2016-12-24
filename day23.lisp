@@ -196,6 +196,11 @@ dec a
     (setf-reg 'a mach 7)
     mach))
 
+(defun make-mach-12 ()
+  (let ((mach (make-mach)))
+    (setf-reg 'a mach 12)
+    mach))
+
 ;; Tests
 (let ((instr-mem (with-input-from-string (in test-input)
                    (make-instr-mem in)))
@@ -208,5 +213,12 @@ dec a
                    (make-instr-mem in)))
       (mach (make-mach-7)))
   (format t "## Test 1: from day23-input.~%")
+  (mach-run mach instr-mem)
+  (format t "Machine state is: ~s,~% ~s~%" mach instr-mem))
+
+(let ((instr-mem (with-open-file (in "day23-input")
+                   (make-instr-mem in)))
+      (mach (make-mach-12)))
+  (format t "## Test 2: from day23-input.~%")
   (mach-run mach instr-mem)
   (format t "Machine state is: ~s,~% ~s~%" mach instr-mem))
