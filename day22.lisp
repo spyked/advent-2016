@@ -168,76 +168,88 @@ data (avail and use%)."
                            (cons (car dest-node) (cadr dest-node)))))
           (viable-adjacent-pairs (state-nodes state))))
 
-(defun is-final-state? (state)
+(defun is-final-state? (state target-pos)
   "Is state final?"
-  (equal (state-data-pos state) '(0 . 0)))
+  (equal (state-data-pos state) target-pos))
 
 (defun adjacent-nodes-used (node nodes)
   "Get the used disk data in each adjacent node to node."
   (mapcar #'cadddr (get-adjacent-nodes node nodes)))
 
-(defun score (state)
+(defun score (state final-pos)
   "Evaluate the score of a given state."
   (let* ((data-pos (state-data-pos state)))
-    (+ (car data-pos) (cdr data-pos))))
+    (abs (- (+ (car data-pos) (cdr data-pos))
+            (+ (car final-pos) (cdr final-pos))))))
 
-(defun sort-states (state-list)
+(defun sort-states (state-list final-pos)
   "Destructively sort a list of states."
-  (sort state-list #'(lambda (s1 s2) (< (score s1) (score s2)))))
+  (sort state-list #'(lambda (s1 s2) (< (score s1 final-pos)
+                                        (score s2 final-pos)))))
+
+(defun equal-states? (state1 state2)
+  "Are states1 and states2 equal?"
+  (let ((data-pos1 (state-data-pos state1))
+        (data-pos2 (state-data-pos state2))
+        (nodes1 (state-nodes state1))
+        (nodes2 (state-nodes state2)))
+    (and (equal data-pos1 data-pos2)
+         (equal nodes1 nodes2))))
 
 (defun is-discovered? (state discovered)
   "Was a state previously discovered?"
-  (assoc state discovered :test 'equal))
+  (assoc state discovered :test #'equal-states?))
 
 ;; State space exploration algorithm(s)
-(defun explore-bfs (discovered queue)
+(defun explore-bfs (discovered queue final-pos)
   "(Destructively) explore using BFS starting from queue state."
   (do ((is-final nil))
       ((or is-final (null queue)) (cons is-final discovered))
     (let* ((p (pop queue))
            (state (car p))
-           (new-states (sort-states (states-from state))))
+           (new-states (sort-states (states-from state) final-pos)))
       (push p discovered)
       (loop for new-state in new-states do
            (when (not (is-discovered? new-state discovered))
              (setq queue (nconc queue (list (cons new-state state)))))
-           (when (is-final-state? new-state)
+           (when (is-final-state? new-state final-pos)
              (push (cons new-state state) discovered)
              (setq is-final t)
              (return)
              )))))
 
-(defun explore-dfs (discovered stack)
+(defun explore-dfs (discovered stack final-pos &optional (max-depth nil))
   "(Destructively) explore using DFS starting from stack state."
-  (do ((is-final nil))
-      ((or is-final (null stack)) (cons is-final discovered))
+  (do ((is-final nil)
+       (stop nil))
+      ((or stop (null stack)) (cons is-final discovered))
     (let* ((p (pop stack))
            (state (car p))
-           (new-states (sort-states (states-from state))))
-      (push p discovered)
-      (loop for new-state in new-states do
-           (when (not (is-discovered? new-state discovered))
-             (push (cons new-state state) stack))
-           (when (is-final-state? new-state)
-             (push (cons new-state state) discovered)
-             (setq is-final t)
-             (return)
-             )))))
+           (parent-state (cadr p))
+           (depth (caddr p))
+           (new-states (sort-states (states-from state) final-pos)))
+      (push (cons state parent-state) discovered)
+      (if (and max-depth (>= depth max-depth))
+          nil
+          (loop for new-state in new-states do
+               (when (not (is-discovered? new-state discovered))
+                 (push (list new-state state (+ 1 depth)) stack))
+               (when (is-final-state? new-state final-pos)
+                 (push (cons new-state state) discovered)
+                 (setq is-final t
+                       stop t)
+                 (return)
+                 ))))))
 
-;; Further thought on problem:
-;
-; Naive DFS/BFS approaches don't work here, even with a search
-; heuristic, as the state space seems to be huge. The program runs out
-; of memory after a few minutes of search.
-;
-; Idea: the problem can be broken into small iterative „find the
-; shortest path from node-x{i}-y0 to node-x{i-1}-y0” steps, until
-; node-x0-y0 is reached. The fact that we start on column 0 seems to
-; indicate that we should be able to move the data only on column 0 --
-; for the given input, in general this might not hold.
-;
-; TODO this: ^
-;;
+(defun explore-iddfs (initial-state final-pos)
+  (do ((depth 1 (1+ depth))
+       (result nil))
+      ((not (null result)) result)
+    (let ((explore (explore-dfs nil
+                                (list (list initial-state 'none 0))
+                                final-pos depth)))
+      (when (car explore)
+        (setq result (cdr explore))))))
 
 (defun find-final-state (discovered)
   "Find the final state in discovered."
@@ -250,7 +262,7 @@ data (avail and use%)."
 
 (defun find-path (initial final discovered)
   "Find a path from initial to final in discovered."
-  (if (equal initial final)
+  (if (equal-states? initial final)
       (list initial)
       (cons final
             (let ((new-final (cdr (is-discovered? final discovered))))
@@ -285,8 +297,12 @@ Filesystem            Size  Used  Avail  Use%
                     (parse-input in)))
        (initial-state (make-state test-nodes)))
   (format t "## Test 0.2: input from test-input...~%")
-  (let* ((explore (explore-bfs nil (list (cons initial-state 'none))))
-         (discovered (cdr explore))
+  (let* (
+         ;; (explore (explore-bfs nil
+         ;;                       (list (cons initial-state 'none))
+         ;;                       '(0 . 0)))
+         ;; (discovered (cdr explore))
+         (discovered (explore-iddfs initial-state '(0 . 0)))
          (final-state (find-final-state discovered))
          (path (find-path initial-state final-state discovered)))
     (format t "Found solution of length ~d.~%" (length path))))
@@ -296,8 +312,12 @@ Filesystem            Size  Used  Avail  Use%
                     (parse-input in)))
        (initial-state (make-state my-nodes)))
   (format t "## Test 2: input from day22-input...~%")
-  (let* ((explore (explore-dfs nil (list (cons initial-state 'none))))
-         (discovered (cdr explore))
+  (let* (
+         ;; (explore (explore-bfs nil (list (cons initial-state 'none))
+         ;;                       '(0 . 0)))
+         ;; (discovered (cdr explore))
+         (discovered (explore-iddfs initial-state '(0 . 0)))
          (final-state (find-final-state discovered))
          (path (find-path initial-state final-state discovered)))
-    (format t "Found solution of length ~d.~%" (length path))))
+    (format t "Found solution of length ~d.~%" (length path)))
+  )
