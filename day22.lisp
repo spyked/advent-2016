@@ -179,8 +179,8 @@ data (avail and use%)."
 (defun score (state final-pos)
   "Evaluate the score of a given state."
   (let* ((data-pos (state-data-pos state)))
-    (abs (- (+ (car data-pos) (cdr data-pos))
-            (+ (car final-pos) (cdr final-pos))))))
+    (+ (abs (- (car data-pos) (car final-pos)))
+       (abs (- (cdr data-pos) (cdr final-pos))))))
 
 (defun sort-states (state-list final-pos)
   "Destructively sort a list of states."
@@ -351,9 +351,11 @@ Filesystem            Size  Used  Avail  Use%
     (format t "Found solution of length ~d.~%" (length path))))
 
 ; Actual run
+(defvar *sol2*)
 (let* ((my-nodes (with-open-file (in "day22-input")
                     (parse-input in)))
        (initial-state (make-state my-nodes)))
   (format t "## Test 2: input from day22-input...~%")
   (let* ((path (solve-grid initial-state)))
+    (setq *sol2* path)
     (format t "Found solution of length ~d.~%" (length path))))
