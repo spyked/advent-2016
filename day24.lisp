@@ -178,17 +178,75 @@
          (final-state (find-final-state discovered)))
     (find-path initial-state final-state discovered)))
 
+;; Part 2
+;
+; After visiting all the target locations, the robot needs to return to
+; target location labeled 0. This time we're asked for the minimal
+; number of steps required to go through all the locations (which we
+; know) and then back to location 0.
+;;
+
+;; Note:
+;
+; We apply the same strategy, only with a different score (the number of
+; to-visit plus the manhattan distance to label 0) and a different
+; find-final-state routine.
+;;
+(defvar *return-pos*)
+
+(defun score2 (state)
+  "Number of to-visit location and manhattan distance to *return-pos*."
+  (+ (length (caddr state))
+     (abs (- (+ (car state) (cadr state))
+             (+ (car *return-pos*) (cdr *return-pos*))))))
+
+(defun find-final-state2 (discovered)
+  "Find the final state in discovered."
+  (let ((edge (find-if #'(lambda (pair)
+                           (and (null (caddr (car pair)))
+                                (= 0 (score2 (car pair)))))
+                       discovered)))
+    (when edge
+      (car edge))))
+
+(defun solve-robot2 (initial-state)
+  (let* ((discovered (explore-astar initial-state
+                                    #'score2
+                                    #'states-from))
+         (final-state (find-final-state2 discovered)))
+    (find-path initial-state final-state discovered)))
+
 ;; Tests
+(defvar *sol1*)
+(defvar *sol2*)
 ; zero
 (format t "## Test 0.1: from test-input~%")
 (setq *game-map* (with-input-from-string (in test-input)
                    (parse-input in)))
 (let ((solution (solve-robot (make-initial-state))))
-  (format t "Found solution of length ~d.~%" (- (length solution) 1)))
+  (setq *sol1* (- (length solution) 1))
+  (format t "Found solution of length ~d.~%" *sol1*))
+
+(format t "## Test 0.2: from test-input~%")
+(setq *return-pos* (let ((initial-state (make-initial-state)))
+                      (cons (car initial-state)
+                            (cadr initial-state))))
+(let ((solution (solve-robot2 (make-initial-state))))
+  (setq *sol2* (- (length solution) 1))
+  (format t "Found solution of length ~d.~%" *sol2*))
 
 ; one
 (format t "## Test 1: from day24-input~%")
 (setq *game-map* (with-open-file (in "day24-input")
                    (parse-input in)))
 (let ((solution (solve-robot (make-initial-state))))
-  (format t "Found solution of length ~d.~%" (- (length solution) 1)))
+  (setq *sol1* (- (length solution) 1))
+  (format t "Found solution of length ~d.~%" *sol1*))
+
+(format t "## Test 2: from day24-input~%")
+(setq *return-pos* (let ((initial-state (make-initial-state)))
+                      (cons (car initial-state)
+                            (cadr initial-state))))
+(let ((solution (solve-robot2 (make-initial-state))))
+  (setq *sol2* (- (length solution) 1))
+  (format t "Found solution of length ~d.~%" *sol2*))
