@@ -197,8 +197,8 @@
 (defun score2 (state)
   "Number of to-visit location and manhattan distance to *return-pos*."
   (+ (length (caddr state))
-     (abs (- (+ (car state) (cadr state))
-             (+ (car *return-pos*) (cdr *return-pos*))))))
+     (abs (- (car state) (car *return-pos*)))
+     (abs (- (cadr state) (cdr *return-pos*)))))
 
 (defun find-final-state2 (discovered)
   "Find the final state in discovered."
@@ -240,13 +240,13 @@
 (setq *game-map* (with-open-file (in "day24-input")
                    (parse-input in)))
 (let ((solution (solve-robot (make-initial-state))))
-  (setq *sol1* (- (length solution) 1))
-  (format t "Found solution of length ~d.~%" *sol1*))
+  (setq *sol1* solution)
+  (format t "Found solution of length ~d.~%" (- (length *sol1*) 1)))
 
 (format t "## Test 2: from day24-input~%")
 (setq *return-pos* (let ((initial-state (make-initial-state)))
                       (cons (car initial-state)
                             (cadr initial-state))))
 (let ((solution (solve-robot2 (make-initial-state))))
-  (setq *sol2* (- (length solution) 1))
-  (format t "Found solution of length ~d.~%" *sol2*))
+  (setq *sol2* solution)
+  (format t "Found solution of length ~d.~%" (- (length  *sol2*) 1)))
