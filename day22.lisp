@@ -251,6 +251,46 @@ data (avail and use%)."
       (when (car explore)
         (setq result (cdr explore))))))
 
+(defmacro prio-queue-pop (prio-queue)
+  "Pop from a priority queue prio-queue."
+  ; We assume the minimum is always in front of the list.
+  `(pop ,prio-queue))
+
+(defun prio-queue-push0 (what where)
+  (if (or (null where) (< (car what) (caar where)))
+      (cons what where)
+      (cons (car where) (prio-queue-push0 what (cdr where)))))
+
+(defmacro prio-queue-push (what where)
+  "Push to a priority queue."
+  `(setq ,where (prio-queue-push0 ,what ,where)))
+
+(defun path-cost (state costs &optional (eq-func #'equal))
+  "Evaluate the path cost of a state."
+  (let ((found (assoc state costs :test eq-func)))
+    (when found (cdr found))))
+
+(defun explore-astar (initial-state h-func move-func &optional (eq-func #'equal))
+  "General A* exploration algorithm."
+  (do ((prio-queue (list (cons (funcall h-func initial-state) initial-state)))
+       (parents (list (cons initial-state 'none)))
+       (cost-to (list (cons initial-state 0)))
+       (stop nil))
+      ((or stop (null prio-queue)) parents)
+    (let* ((p (prio-queue-pop prio-queue))
+           (state (cdr p)))
+      (if (= 0 (funcall h-func state))
+          (setq stop t)
+          (let ((cost (1+ (path-cost state cost-to eq-func))))
+           (loop for new-state in (funcall move-func state) do
+                (let ((new-cost (path-cost new-state cost-to eq-func)))
+                  (when (or (not new-cost) (< cost new-cost))
+                    (prio-queue-push (cons (+ (funcall h-func new-state) cost)
+                                           new-state)
+                                     prio-queue)
+                    (push (cons new-state cost) cost-to)
+                    (push (cons new-state state) parents)))))))))
+
 (defun find-final-state (discovered)
   "Find the final state in discovered."
   (let ((edge (find-if #'(lambda (pair)
@@ -267,6 +307,16 @@ data (avail and use%)."
       (cons final
             (let ((new-final (cdr (is-discovered? final discovered))))
               (find-path initial new-final discovered)))))
+
+(defun solve-grid (initial-state)
+  "Solve teh grid computing problem."
+  (let* ((discovered (explore-astar initial-state
+                                    #'(lambda (state)
+                                        (score state '(0 . 0)))
+                                    #'states-from
+                                    #'equal-states?))
+         (final-state (find-final-state discovered)))
+    (find-path initial-state final-state discovered)))
 
 ;; Tests
 
@@ -297,14 +347,7 @@ Filesystem            Size  Used  Avail  Use%
                     (parse-input in)))
        (initial-state (make-state test-nodes)))
   (format t "## Test 0.2: input from test-input...~%")
-  (let* (
-         ;; (explore (explore-bfs nil
-         ;;                       (list (cons initial-state 'none))
-         ;;                       '(0 . 0)))
-         ;; (discovered (cdr explore))
-         (discovered (explore-iddfs initial-state '(0 . 0)))
-         (final-state (find-final-state discovered))
-         (path (find-path initial-state final-state discovered)))
+  (let* ((path (solve-grid initial-state)))
     (format t "Found solution of length ~d.~%" (length path))))
 
 ; Actual run
@@ -312,12 +355,5 @@ Filesystem            Size  Used  Avail  Use%
                     (parse-input in)))
        (initial-state (make-state my-nodes)))
   (format t "## Test 2: input from day22-input...~%")
-  (let* (
-         ;; (explore (explore-bfs nil (list (cons initial-state 'none))
-         ;;                       '(0 . 0)))
-         ;; (discovered (cdr explore))
-         (discovered (explore-iddfs initial-state '(0 . 0)))
-         (final-state (find-final-state discovered))
-         (path (find-path initial-state final-state discovered)))
-    (format t "Found solution of length ~d.~%" (length path)))
-  )
+  (let* ((path (solve-grid initial-state)))
+    (format t "Found solution of length ~d.~%" (length path))))
