@@ -107,6 +107,17 @@ data (avail and use%)."
   "Return all the viable pairs in a list of nodes."
   (remove-if-not #'is-viable? (adjacent-node-pairs nodes)))
 
+(defun viable-neighbouring-pairs (node nodes)
+  "Find neighbours of node that can store data in it. Return pairs."
+  (remove-if-not #'(lambda (pair)
+                     (let ((node1 (car pair))
+                           (node2 (cdr pair)))
+                       ; Assumes node2 is empty!
+                       (< (cadddr node1) (caddr node2))))
+                 (mapcar #'(lambda (node1)
+                             (cons node1 node))
+                         (get-adjacent-nodes node nodes))))
+
 ;; Part 2
 ;
 ; Again, an optimization problem. We want to move the data from
@@ -116,8 +127,8 @@ data (avail and use%)."
 ;;
 
 ; State representation and manipulation
-(defstruct (state (:constructor mk-state0 (&key data-pos nodes)))
-  data-pos nodes)
+(defstruct (state (:constructor mk-state0 (&key data-pos empty-pos nodes)))
+  data-pos empty-pos nodes)
 
 (defun max-x (nodes)
   "Get the maximum x from a list of nodes."
@@ -125,9 +136,17 @@ data (avail and use%)."
               (max acc (car node)))
           nodes :initial-value 0))
 
+(defun find-empty-pos (nodes)
+  (let ((node (find-if #'(lambda (node)
+                           ; Used is 0
+                           (= 0 (cadddr node)))
+                       nodes)))
+    (cons (car node) (cadr node))))
+
 (defun make-state (nodes)
   "Make a fresh initial state from nodes."
   (mk-state0 :data-pos (cons (max-x nodes) 0)
+             :empty-pos (find-empty-pos nodes)
              :nodes nodes))
 
 (defmacro find-node-pos (pos nodes)
@@ -149,13 +168,16 @@ data (avail and use%)."
     (mk-state0 :data-pos (if (equal data-pos old-data-pos)
                              new-data-pos
                              data-pos)
-               :nodes (substitute new-dest-node
-                                  dest-node
-                                  (substitute new-src-node
-                                              src-node
-                                              nodes
-                                              :test 'equal)
-                                  :test 'equal))))
+               :empty-pos old-data-pos
+               :nodes nodes
+               ;; :nodes (substitute new-dest-node
+               ;;                    dest-node
+               ;;                    (substitute new-src-node
+               ;;                                src-node
+               ;;                                nodes
+               ;;                                :test 'equal)
+               ;;                    :test 'equal)
+               )))
 
 ;; High-level state space exploration functionality
 (defun states-from (state)
@@ -166,7 +188,11 @@ data (avail and use%)."
                 (move-data state
                            (cons (car src-node) (cadr src-node))
                            (cons (car dest-node) (cadr dest-node)))))
-          (viable-adjacent-pairs (state-nodes state))))
+          (viable-neighbouring-pairs
+           (find-node-pos (state-empty-pos state)
+                          (state-nodes state))
+           
+           (state-nodes state))))
 
 (defun is-final-state? (state target-pos)
   "Is state final?"
@@ -176,11 +202,17 @@ data (avail and use%)."
   "Get the used disk data in each adjacent node to node."
   (mapcar #'cadddr (get-adjacent-nodes node nodes)))
 
+(defun manhattan-distance (pos1 pos2)
+  (+ (abs (- (car pos1) (car pos2)))
+     (abs (- (cdr pos1) (cdr pos2)))))
+
 (defun score (state final-pos)
   "Evaluate the score of a given state."
-  (let* ((data-pos (state-data-pos state)))
-    (+ (abs (- (car data-pos) (car final-pos)))
-       (abs (- (cdr data-pos) (cdr final-pos))))))
+  (let* ((data-pos (state-data-pos state))
+         (empty-pos (state-empty-pos state)))
+    (+ (manhattan-distance data-pos final-pos)
+       (manhattan-distance empty-pos data-pos)
+       -1)))
 
 (defun sort-states (state-list final-pos)
   "Destructively sort a list of states."
@@ -191,9 +223,12 @@ data (avail and use%)."
   "Are states1 and states2 equal?"
   (let ((data-pos1 (state-data-pos state1))
         (data-pos2 (state-data-pos state2))
+        (empty-pos1 (state-empty-pos state1))
+        (empty-pos2 (state-empty-pos state2))
         (nodes1 (state-nodes state1))
         (nodes2 (state-nodes state2)))
     (and (equal data-pos1 data-pos2)
+         (equal empty-pos1 empty-pos2)
          (equal nodes1 nodes2))))
 
 (defun is-discovered? (state discovered)
